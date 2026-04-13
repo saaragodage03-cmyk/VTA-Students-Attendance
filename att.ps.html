@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Attendance System - Secure Admin</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #f0f2f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        
+        /* Login Screen */
+        #loginSection { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        .login-input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 8px; outline: none; }
+        .login-btn { width: 100%; padding: 12px; background: #4facfe; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+
+        /* Dashboard Screen */
+        #mainApp { display: none; width: 100%; max-width: 1000px; background: white; border-radius: 15px; padding: 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); margin: auto; }
+        .nav-buttons { float: right; display: flex; gap: 10px; margin-bottom: 20px; }
+        
+        .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px; clear: both; }
+        input, select, .btn-primary { padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        .btn-primary { background: #4facfe; color: white; border: none; cursor: pointer; font-weight: bold; }
+        
+        .btn-logout { background: #ff4757; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn-exit { background: #2d3436; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; text-align: center; }
+        .stat-box { background: #764ba2; color: white; padding: 15px; border-radius: 8px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { background: #4facfe; color: white; padding: 12px; text-align: left; }
+        td { padding: 10px; border: 1px solid #ddd; }
+        .row-present { background-color: #d1fae5 !important; }
+        .row-absent { background-color: #fee2e2 !important; }
+        .no-pdf { padding: 5px 8px; border: none; color: white; border-radius: 4px; cursor: pointer; margin-right: 2px; }
+    </style>
+</head>
+<body>
+
+    <div id="loginSection">
+        <h2 style="margin-bottom: 20px;">🔒 Admin Login</h2>
+        <input type="text" id="userInput" class="login-input" placeholder="Username (Ex: saara)">
+        <input type="password" id="passInput" class="login-input" placeholder="Password">
+        <button onclick="login()" class="login-btn">Login</button>
+    </div>
+
+    <div id="mainApp">
+        <div class="nav-buttons">
+            <button class="btn-logout" onclick="logout()">Logout</button>
+            <button class="btn-exit" onclick="exitApp()">Exit</button>
+        </div>
+        
+        <h1 style="text-align: center; margin-bottom: 20px; clear: both;">📊 Attendance Dashboard</h1>
+
+        <div class="controls">
+            <input type="text" id="idNo" placeholder="ID Number">
+            <input type="text" id="studentName" placeholder="Student Name">
+            <select id="studentClass">
+                <option value="ICT Level 5">ICT Level 5</option>
+            <option value="Hardware">Hardware</option>
+            <option value="QS">QS</option>
+             <option value="Electronic">Electronic</option>
+            <option value="Multimedia">Multimedia</option>
+            <option value="ICT Level 4">ICT Level 4</option>
+            <option value="Backery & Pestry">Backery & Pestry</option>
+            <option value="Preschool">Preschool</option>
+            <option value="Child Care">Child Care</option>
+            </select>
+            <button class="btn-primary" onclick="addStudent()">➕ Add Student</button>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background:#e9ecef; padding:15px; border-radius:8px;">
+            <div>
+                <label><b>View Class: </b></label>
+                <select id="viewFilter" onchange="loadData()" style="padding: 8px; border-radius:5px;">
+                   <option value="ICT Level 5">ICT Level 5</option>
+            <option value="Hardware">Hardware</option>
+            <option value="QS">QS</option>
+             <option value="Electronic">Electronic</option>
+            <option value="Multimedia">Multimedia</option>
+            <option value="ICT Level 4">ICT Level 4</option>
+            <option value="Backery & Pestry">Backery & Pestry</option>
+            <option value="Preschool">Preschool</option>
+            <option value="Child Care">Child Care</option>
+                </select>
+            </div>
+            <button onclick="downloadPDF()" style="background: #2d3436; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer;">📥 Download PDF</button>
+        </div>
+
+        <div id="reportArea">
+            <div class="stats-grid">
+                <div class="stat-box"><h2 id="totalS">0</h2><small>Total</small></div>
+                <div class="stat-box"><h2 id="presentS">0</h2><small>Present</small></div>
+                <div class="stat-box"><h2 id="absentS">0</h2><small>Absent</small></div>
+                <div class="stat-box"><h2 id="rateS">0%</h2><small>Rate</small></div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Student Name</th>
+                        <th>Status</th>
+                        <th class="no-pdf-header">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+<script>
+    // Firebase Configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyBd6eCDhpbfUu05t1KiOme6F-xfNNZ4PdI",
+        authDomain: "attendance-de98f.firebaseapp.com",
+        projectId: "attendance-de98f",
+        storageBucket: "attendance-de98f.firebasestorage.app",
+        messagingSenderId: "767420907563",
+        appId: "1:767420907563:web:c35dae208efaf776eaaa6e"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
+    let currentDate = new Date().toISOString().split('T')[0];
+
+    // --- 1. Login Function with Session Persistence ---
+    function login() {
+        const user = document.getElementById('userInput').value.trim();
+        const pass = document.getElementById('passInput').value;
+        const email = user.includes("@") ? user : user + "@app.com";
+
+        auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+            .then(() => {
+                return auth.signInWithEmailAndPassword(email, pass);
+            })
+            .catch(err => {
+                alert("Incorrect  Username or Password!");
+                console.error(err);
+            });
+    }
+
+    // --- 2. Logout Function (Clear all sessions) ---
+    function logout() {
+        if(confirm(" Are you sure to Logout?")) {
+            auth.signOut().then(() => {
+                sessionStorage.clear();
+                localStorage.clear();
+                alert("සාර්ථකව Logout වුණා!");
+                location.reload(); 
+            });
+        }
+    }
+
+    // --- 3. Exit Function ---
+    function exitApp() {
+        if (confirm("Want you exit?")) {
+            window.location.href = "about:blank"; // සයිට් එකෙන් ඉවත් වීමට
+        }
+    }
+
+    // Auth state observer
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'block';
+            document.body.style.display = 'block';
+            loadData();
+        } else {
+            document.getElementById('loginSection').style.display = 'block';
+            document.getElementById('mainApp').style.display = 'none';
+            document.body.style.display = 'flex';
+        }
+    });
+
+    // --- Database Functions ---
+    function addStudent() {
+        const idNo = document.getElementById('idNo').value.trim();
+        const name = document.getElementById('studentName').value.trim();
+        const sClass = document.getElementById('studentClass').value;
+        if (idNo && name) {
+            db.ref('students').push({ idNo, name, class: sClass, attendance: {} });
+            document.getElementById('idNo').value = ''; document.getElementById('studentName').value = '';
+        }
+    }
+
+    function loadData() {
+        db.ref('students').on('value', snapshot => {
+            const data = snapshot.val();
+            const filter = document.getElementById('viewFilter').value;
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            let total = 0, present = 0;
+
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const s = data[key];
+                    if (s.class === filter) {
+                        total++;
+                        const status = (s.attendance && s.attendance[currentDate]) ? s.attendance[currentDate] : 'absent';
+                        if (status === 'present') present++;
+                        const tr = document.createElement('tr');
+                        tr.className = status === 'present' ? 'row-present' : 'row-absent';
+                        tr.innerHTML = `<td>${s.idNo}</td><td>${s.name}</td><td>${status.toUpperCase()}</td>
+                            <td class="no-pdf">
+                                <button class="no-pdf" style="background:#10b981; padding:5px; border-radius:3px; border:none; color:white; cursor:pointer;" onclick="mark('${key}','present')">P</button>
+                                <button class="no-pdf" style="background:#ef4444; padding:5px; border-radius:3px; border:none; color:white; cursor:pointer;" onclick="mark('${key}','absent')">A</button>
+                                <button class="no-pdf" style="background:#636e72; padding:5px; border-radius:3px; border:none; color:white; cursor:pointer;" onclick="remove('${key}')">Del</button>
+                            </td>`;
+                        tbody.appendChild(tr);
+                    }
+                });
+            }
+            updateStats(total, present);
+        });
+    }
+
+    function mark(key, stat) { db.ref(`students/${key}/attendance/${currentDate}`).set(stat); }
+    function remove(key) { if(confirm("want remove this student?")) db.ref(`students/${key}`).remove(); }
+
+    function updateStats(t, p) {
+        document.getElementById('totalS').innerText = t;
+        document.getElementById('presentS').innerText = p;
+        document.getElementById('absentS').innerText = t - p;
+        document.getElementById('rateS').innerText = t > 0 ? Math.round((p/t)*100)+"%" : "0%";
+    }
+
+    function downloadPDF() {
+        const element = document.getElementById('reportArea');
+        const opt = {
+            margin: 10,
+            filename: 'Attendance_Report.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, ignoreElements: (el) => el.classList.contains('no-pdf') },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        html2pdf().from(element).set(opt).save();
+    }
+</script>
+</body>
+</html>
